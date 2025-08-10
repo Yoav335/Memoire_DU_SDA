@@ -1,0 +1,8 @@
+streamlit
+pandas
+statsmodels
+scikit-learn
+xgboost
+matplotlib
+seaborn
+run_ols

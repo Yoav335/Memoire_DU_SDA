@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from utils.data_loader import load_data
-from utils.econometrics import run_ols_with_results  # version modifiée de run_ols qui retourne les résultats
+from utils.econometrics import run_ols_with_results  
 
 st.title("📊 Tests Économétriques – Impact des émissions sur la croissance par zone géographique")
 

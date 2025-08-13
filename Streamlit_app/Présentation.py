@@ -80,10 +80,10 @@ st.markdown("""
 
 """, unsafe_allow_html=True)
 st.markdown("---")
+
 # --- Description + instructions ---
 st.markdown("""
 Utilisez le menu latéral pour naviguer entre :  
-- Présentation des modèles  
 - Tests économétriques  
 - Modèles Machine Learning (Ridge, Random Forest, XGBoost)  
 - Modèles Deep Learning (en préparation)  

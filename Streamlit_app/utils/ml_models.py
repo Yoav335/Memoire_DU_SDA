@@ -119,3 +119,63 @@ def train_random_forest(df, target, features, n_estimators=100, test_size=0.2, r
         "target": y_test,
     }
     return results
+
+
+
+from sklearn.linear_model import Ridge
+from sklearn.metrics import r2_score, mean_squared_error
+from sklearn.model_selection import train_test_split
+import numpy as np
+import pandas as pd
+
+def train_ridge_split(df, target, features, alpha=1.0, test_size=0.2, random_state=42):
+    """
+    Entraîne une régression Ridge avec split train/test et calcule la perte.
+
+    Args:
+        df (pd.DataFrame): Données contenant features + target
+        target (str): Nom de la variable cible
+        features (list): Liste des variables explicatives
+        alpha (float): Paramètre de régularisation Ridge
+        test_size (float): Proportion des données pour le test
+        random_state (int): Graine aléatoire
+
+    Returns:
+        dict: Résultats avec métriques, coefficients, fitted/test values et perte
+    """
+    df_model = df[features + [target]].dropna()
+    X = df_model[features].values
+    y = df_model[target].values
+
+    # Split train/test
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=test_size, random_state=random_state
+    )
+
+    model = Ridge(alpha=alpha, random_state=random_state)
+    model.fit(X_train, y_train)
+
+    # Prédictions test
+    y_pred = model.predict(X_test)
+
+    # Calcul des métriques
+    r2 = r2_score(y_test, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+
+    # Fonction de perte Ridge sur le test
+    mse_test = mean_squared_error(y_test, y_pred)
+    ridge_penalty = alpha * np.sum(model.coef_ ** 2)
+    loss = mse_test + ridge_penalty
+
+    results = {
+        "model": model,
+        "features": features,
+        "r2": r2,
+        "rmse": rmse,
+        "coefficients": pd.Series(model.coef_, index=features),
+        "fittedvalues": y_pred,
+        "resid": y_test - y_pred,
+        "target": y_test,
+        "loss": loss,
+    }
+    return results

@@ -7,11 +7,16 @@ from sklearn.linear_model import Ridge
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-import streamlit as st
+from sklearn.linear_model import Ridge
+from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import r2_score, mean_squared_error
+import numpy as np
 import pandas as pd
+
 
 def plot_real_vs_pred(y_true, y_pred, title="Valeurs réelles vs Prédictions"):
     """
@@ -50,14 +55,7 @@ def plot_feature_importance(series_importance, title="Importance des variables")
     st.pyplot(plt.gcf())
     plt.clf()
 
-
-import numpy as np
-import pandas as pd
-from sklearn.linear_model import Ridge
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import r2_score, mean_squared_error
-
-def train_ridge(df, target, features, alpha=1.0, normalize=True):
+def train_ridge(df, target, features, alpha=60, normalize=True):
     df_model = df[features + [target]].dropna()
 
     X = df_model[features].values
@@ -90,26 +88,20 @@ def train_ridge(df, target, features, alpha=1.0, normalize=True):
     if normalize:
         coeffs_norm = pd.Series(model.coef_, index=features)  # coefficients comparables entre features
     else:
-        # si y pas normalisé : remettre à l’échelle originale
         coeffs_norm = pd.Series(model.coef_ / scaler_X.scale_, index=features)
 
     results = {
-        "r2": r2_score(y, y_pred),
-        "rmse": np.sqrt(mean_squared_error(y, y_pred)),
+        "r2_train": r2_score(y, y_pred),
+        "rmse_train": np.sqrt(mean_squared_error(y, y_pred)),
         "coefficients": coeffs_norm,
-        "fittedvalues": y_pred,
-        "resid": resid,
-        "target": y.ravel(),
+        # ✅ clés compatibles avec l’onglet graphique
+        "y_train": y.ravel(),
+        "y_pred_train": y_pred,
+        "resid_train": resid,
     }
     return results
 
 
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score, mean_squared_error
-import pandas as pd
-import numpy as np
 
 def train_random_forest(df, target, features, n_estimators=100, test_size=0.2, random_state=42):
     """
@@ -161,27 +153,7 @@ def train_random_forest(df, target, features, n_estimators=100, test_size=0.2, r
     }
     return results
 
-from sklearn.linear_model import Ridge
-from sklearn.metrics import r2_score, mean_squared_error
-from sklearn.model_selection import train_test_split
-import numpy as np
-import pandas as pd
-
-def train_ridge_split(df, target, features, alpha=1.0, test_size=0.2, random_state=42):
-    """
-    Entraîne une régression Ridge avec split train/test et calcule la perte.
-
-    Args:
-        df (pd.DataFrame): Données contenant features + target
-        target (str): Nom de la variable cible
-        features (list): Liste des variables explicatives
-        alpha (float): Paramètre de régularisation Ridge
-        test_size (float): Proportion des données pour le test
-        random_state (int): Graine aléatoire
-
-    Returns:
-        dict: Résultats avec métriques, coefficients, fitted/test values et perte
-    """
+def train_ridge_split(df, target, features, alpha=60, test_size=0.2, random_state=42):
     df_model = df[features + [target]].dropna()
     X = df_model[features].values
     y = df_model[target].values
@@ -191,30 +163,35 @@ def train_ridge_split(df, target, features, alpha=1.0, test_size=0.2, random_sta
         X, y, test_size=test_size, random_state=random_state
     )
 
-    model = Ridge(alpha=alpha, random_state=random_state)
-    model.fit(X_train, y_train)
+    # Standardisation
+    scaler_X = StandardScaler()
+    X_train_scaled = scaler_X.fit_transform(X_train)
+    X_test_scaled = scaler_X.transform(X_test)
 
-    # Prédictions test
-    y_pred = model.predict(X_test)
+    scaler_y = StandardScaler()
+    y_train_scaled = scaler_y.fit_transform(y_train.reshape(-1,1)).ravel()
 
-    # Calcul des métriques
-    r2 = r2_score(y_test, y_pred)
-    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    # Ridge
+    model = Ridge(alpha=alpha)
+    model.fit(X_train_scaled, y_train_scaled)
 
-    # Fonction de perte Ridge sur le test
-    mse_test = mean_squared_error(y_test, y_pred)
-    ridge_penalty = alpha * np.sum(model.coef_ ** 2)
-    loss = mse_test + ridge_penalty
+    # Prédictions
+    y_train_pred = scaler_y.inverse_transform(model.predict(X_train_scaled).reshape(-1,1)).ravel()
+    y_test_pred = scaler_y.inverse_transform(model.predict(X_test_scaled).reshape(-1,1)).ravel()
 
     results = {
-        "model": model,
-        "features": features,
-        "r2": r2,
-        "rmse": rmse,
+        "r2_train": r2_score(y_train, y_train_pred),
+        "r2_test": r2_score(y_test, y_test_pred),
+        "rmse_train": np.sqrt(mean_squared_error(y_train, y_train_pred)),
+        "rmse_test": np.sqrt(mean_squared_error(y_test, y_test_pred)),
         "coefficients": pd.Series(model.coef_, index=features),
-        "fittedvalues": y_pred,
-        "resid": y_test - y_pred,
-        "target": y_test,
-        "loss": loss,
+        # ✅ clés compatibles avec l’onglet graphique
+        "y_train": y_train,
+        "y_pred_train": y_train_pred,
+        "y_test": y_test,
+        "y_pred_test": y_test_pred,
+        "resid_train": y_train - y_train_pred,
+        "resid_test": y_test - y_test_pred,
     }
+
     return results

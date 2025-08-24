@@ -2,6 +2,13 @@ import streamlit as st
 import pandas as pd
 from utils.data_loader import load_data
 from utils.econometrics import run_ols_with_results  
+import streamlit as st
+import pandas as pd
+from utils.data_loader import load_data
+from utils.ml_models import train_ridge, train_random_forest, train_ridge_split
+from sklearn.tree import plot_tree
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 st.title("📊 Tests Économétriques – Impact des émissions sur la croissance par zone géographique")
 
@@ -28,7 +35,12 @@ target_vars = ['gdp', 'gdp_per_capita', 'co2', 'co2_per_capita']
 default_models = {
     "Régression 1": {
         "target": "gdp",
-        "features": ["co2", "energy_per_capita"],
+        "features": [    "cement_co2",
+    "oil_co2",
+    "coal_co2",
+    "methane",
+    "nitrous_oxide",
+    ],
         "description": "Modèle avec PIB total expliqué par CO2 total et consommation d'énergie par habitant."
     },
     "Régression 2": {
@@ -122,10 +134,9 @@ with tabs[2]:
                 st.success("Modèle lancé et résultats sauvegardés.")
             except Exception as e:
                 st.error(f"Erreur : {e}")
-
-# Onglet Comparaison
+# --- Onglet Comparaison Econométrie ---
 with tabs[3]:
-    st.header("Comparaison des modèles")
+    st.header("Comparaison des modèles économétriques")
 
     if not st.session_state.model_results:
         st.info("Lancez au moins un modèle dans les autres onglets pour comparer ici.")
@@ -134,40 +145,41 @@ with tabs[3]:
     modèles_lancés = list(st.session_state.model_results.keys())
     modèles_choisis = st.multiselect("Sélectionnez les modèles à comparer", modèles_lancés, default=modèles_lancés)
 
-    if modèles_choisis:
-        # Construction d'un tableau résumé
+    if not modèles_choisis:
+        st.warning("Sélectionnez au moins un modèle pour comparer.")
+    else:
+        import numpy as np
+
+        # ---------------- Tableau résumé ----------------
         résumé = []
         for mod in modèles_choisis:
             res = st.session_state.model_results[mod]
             résumé.append({
                 "Modèle": mod,
-                "R²": res.get("r2"),
-                "AIC": res.get("aic"),
-                "BIC": res.get("bic"),
-                "RMSE": res.get("rmse"),
+                "R²": res.get("r2", np.nan),
+                "RMSE": res.get("rmse", np.nan),
             })
         df_résumé = pd.DataFrame(résumé).set_index("Modèle")
         st.dataframe(df_résumé.style.format({
             "R²": "{:.3f}",
-            "AIC": "{:.1f}",
-            "BIC": "{:.1f}",
             "RMSE": "{:.3f}"
         }))
 
-        # Graphique 1 : R² et RMSE (barres doubles)
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots()
-        df_résumé[["R²", "RMSE"]].plot(kind='bar', ax=ax, secondary_y="RMSE", rot=45)
-        ax.set_ylabel("R²")
-        ax.right_ax.set_ylabel("RMSE")
+        # ---------------- Graphiques métriques ----------------
+        fig, ax = plt.subplots(figsize=(10,5))
+        df_résumé.plot(kind="bar", ax=ax)
+        plt.title("Comparaison des métriques")
+        plt.ylabel("Score / Erreur")
+        plt.xticks(rotation=45, ha="right")
+        plt.tight_layout()
         st.pyplot(fig)
 
-        # Graphique 2 : Valeurs réelles vs Prédictions
-        plt.figure(figsize=(8,5))
+        # ---------------- Graph valeurs réelles vs prédites ----------------
+        plt.figure(figsize=(8,6))
         for mod in modèles_choisis:
             res = st.session_state.model_results[mod]
-            actual = res.get("actual")
-            pred = res.get("predictions")
+            actual = res.get("y_train", res.get("actual"))
+            pred = res.get("y_pred_train", res.get("predictions"))
             if actual is not None and pred is not None:
                 plt.scatter(actual, pred, alpha=0.6, label=mod)
         plt.plot([plt.xlim()[0], plt.xlim()[1]], [plt.xlim()[0], plt.xlim()[1]], 'k--', lw=2)
@@ -178,26 +190,38 @@ with tabs[3]:
         st.pyplot(plt.gcf())
         plt.clf()
 
-        # Graphique 3 : Résidus vs Valeurs ajustées
-        resid_available = any(st.session_state.model_results[mod].get("resid") is not None for mod in modèles_choisis)
+        # ---------------- Graph résidus vs valeurs ajustées ----------------
+        plt.figure(figsize=(8,6))
+        for mod in modèles_choisis:
+            res = st.session_state.model_results[mod]
+            resid = res.get("resid_train", res.get("resid"))
+            fitted = res.get("y_pred_train", res.get("fittedvalues"))
+            if resid is not None and fitted is not None:
+                plt.scatter(fitted, resid, alpha=0.6, label=mod)
+        plt.axhline(0, color='black', lw=1, linestyle='--')
+        plt.xlabel("Valeurs ajustées")
+        plt.ylabel("Résidus")
+        plt.title("Résidus vs Valeurs ajustées")
+        plt.legend()
+        st.pyplot(plt.gcf())
+        plt.clf()
 
-        if resid_available:
-            plt.figure(figsize=(8,5))
-            for mod in modèles_choisis:
-                res = st.session_state.model_results[mod]
-                resid = res.get("resid")
-                fitted = res.get("fittedvalues")
-                if resid is not None and fitted is not None:
-                    plt.scatter(fitted, resid, alpha=0.6, label=mod)
-            plt.axhline(0, color='black', lw=1, linestyle='--')
-            plt.xlabel("Valeurs ajustées")
-            plt.ylabel("Résidus")
-            plt.title("Résidus vs Valeurs ajustées")
-            plt.legend()
-            st.pyplot(plt.gcf())
-            plt.clf()
-        else:
-            st.warning("Pas de données de résidus disponibles pour les modèles sélectionnés.")
+        # ---------------- Coefficients normalisés ----------------
+        coeffs_list = []
+        for mod in modèles_choisis:
+            res = st.session_state.model_results[mod]
+            if "coefficients" in res:
+                coeff_series = pd.Series(res["coefficients"], name=mod)
+                coeffs_list.append(coeff_series)
+        if coeffs_list:
+            df_coeffs = pd.concat(coeffs_list, axis=1).fillna(0)
+            st.subheader("📋 Coefficients normalisés")
+            st.dataframe(df_coeffs.style.format("{:.3e}"))
 
-    else:
-        st.warning("Sélectionnez au moins un modèle pour la comparaison.")
+            st.subheader("📊 Comparaison graphique des coefficients")
+            fig, ax = plt.subplots(figsize=(12,6))
+            df_coeffs.plot(kind="bar", ax=ax)
+            plt.ylabel("Coefficient normalisé")
+            plt.xticks(rotation=45, ha="right")
+            plt.tight_layout()
+            st.pyplot(fig)

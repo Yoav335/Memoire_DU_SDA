@@ -12,24 +12,56 @@ st.title("🤖 Machine Learning – Analyse des émissions et croissance")
 df = load_data()
 
 # Définir les colonnes disponibles
+# Cibles : PIB + CO2
+# Créer les colonnes
+df['gdp_per_capita'] = df['gdp'] / df['population']
+df['co2_per_capita'] = df['co2'] / df['population']
+
+# Définir les cibles par nom de colonne
 target_vars = ['gdp', 'gdp_per_capita', 'co2', 'co2_per_capita']
+
+
+# Supprimer colonnes cibles, pays, année
 feature_vars = [c for c in df.columns if c not in target_vars + ['country', 'year']]
 
+# Variables explicatives par défaut
+#default_features = [
+   # "cement_co2",
+   # "cumulative_cement_co2",
+   # "oil_co2",
+   # "co2_growth_prct",
+   # "co2_including_luc_growth_abs", -0,2
+    #"coal_co2",
+   # "co2_including_luc_per_unit_energy",
+   # "methane",
+    #"co2_growth_abs",
+   # "nitrous_oxide",
+   # "co2_including_luc",
+   # "co2_including_luc_per_gdp",
+    #"co2_including_luc_growth_prct",
+    # "energy_per_gdp"
+
+    # Pour la belegique, on test d'autres variables
 default_features = [
     "cement_co2",
-    "cumulative_cement_co2",
     "oil_co2",
-    "co2_growth_prct",
-    "co2_including_luc_growth_abs",
     "coal_co2",
-    "co2_including_luc_per_unit_energy",
     "methane",
-    "co2_growth_abs",
     "nitrous_oxide",
-    "co2_including_luc",
-    "co2_including_luc_per_gdp",
-    "co2_including_luc_growth_prct",
-    "energy_per_gdp"
+    
+    # Intensité carbone / énergie
+   # "co2_including_luc_per_unit_energy",  # gCO2 par unité d'énergie
+   # "energy_per_capita",                  # énergie par habitant
+    #"energy_per_gdp",                     # énergie par unité de PIB
+    
+    # Variation et tendance des émissions
+    #"co2_growth_abs",
+    #"co2_growth_prct",
+    #"co2_including_luc_growth_abs",
+    #"co2_including_luc_growth_prct",
+    
+    # Autres indicateurs économiques propres
+   # "gdp_per_capita",                     # pour capturer effet taille/population
 ]
 
 # Sélection de la target et des features
@@ -86,10 +118,11 @@ with ml_tabs[1]:
         model_selected = st.selectbox("Choisissez un modèle entraîné", list(st.session_state.ml_results.keys()))
         res = st.session_state.ml_results[model_selected]
 
-        if "fittedvalues" in res and "resid" in res:
+        # Pour Ridge train/test, on utilise y_test et y_pred_test
+        if "y_test" in res and "y_pred_test" in res:
             from utils.ml_models import plot_real_vs_pred, plot_feature_importance
-            y = res["fittedvalues"] + res["resid"]
-            y_pred = res["fittedvalues"]
+            y = res["y_test"]
+            y_pred = res["y_pred_test"]
 
             # Graph valeurs réelles vs prédictions
             plot_real_vs_pred(y, y_pred, f"{model_selected} : Valeurs réelles vs Prédictions")
@@ -113,8 +146,7 @@ with ml_tabs[1]:
                 st.dataframe(importances.to_frame("Importance"))
 
         else:
-            st.warning("Pas de données de prédiction pour ce modèle.")
-
+            st.warning("Pas de données de prédiction pour ce modèle. Assurez-vous d'utiliser un modèle train/test.")
 
         # Arbre Random Forest
         if "model" in res and model_selected.startswith("Random Forest"):
@@ -148,7 +180,10 @@ with ml_tabs[1]:
 # --- Onglet Comparaison ---
 with ml_tabs[2]:
     st.subheader("Comparaison des modèles")
-    if st.session_state.ml_results:
+
+    if not st.session_state.ml_results:
+        st.info("Entraînez d'abord au moins un modèle pour comparer.")
+    else:
         modèles_dispo = list(st.session_state.ml_results.keys())
         modèles_choisis = st.multiselect(
             "Sélectionnez les modèles à comparer", 
@@ -156,47 +191,41 @@ with ml_tabs[2]:
             default=modèles_dispo
         )
 
-        if modèles_choisis:
+        if not modèles_choisis:
+            st.warning("Sélectionnez au moins un modèle pour comparer.")
+        else:
             import numpy as np
 
-            # ---------------- Résumé général (R², RMSE, Loss) ----------------
+            # ---------------- Résumé général (R², RMSE) ----------------
             résumé = []
             for m in modèles_choisis:
                 res = st.session_state.ml_results[m]
                 résumé.append({
                     "Modèle": m,
-                    "R²": res.get("r2", np.nan),
-                    "RMSE": res.get("rmse", np.nan),
-                    "Loss": res.get("loss", np.nan)  # np.nan si pas dispo
+                    "R² train": res.get("r2_train", res.get("r2", np.nan)),
+                    "R² test": res.get("r2_test", np.nan),
+                    "RMSE train": res.get("rmse_train", res.get("rmse", np.nan)),
+                    "RMSE test": res.get("rmse_test", np.nan),
                 })
 
             df_resume = pd.DataFrame(résumé).set_index("Modèle")
 
             # Tableau résumé
             st.dataframe(df_resume.style.format({
-                "R²": "{:.3f}",
-                "RMSE": "{:.3f}",
-                "Loss": lambda x: "{:.3f}".format(x) if not pd.isna(x) else "-"
+                "R² train": "{:.3f}",
+                "R² test": "{:.3f}",
+                "RMSE train": "{:.3e}",
+                "RMSE test": "{:.3e}"
             }))
 
-            # Graph des métriques
+            # ---------------- Graphiques des métriques ----------------
             numeric_cols = df_resume.select_dtypes(include="number").columns
             if not numeric_cols.empty:
-                fig, ax = plt.subplots()
+                fig, ax = plt.subplots(figsize=(12,6))
                 df_resume[numeric_cols].plot(kind="bar", ax=ax)
-                plt.ylabel("Score / Erreur / Perte")
-                plt.title("Comparaison des métriques")
-                plt.xticks(rotation=45)
-                plt.tight_layout()
-                st.pyplot(fig)
-
-            # Graph dédié à la fonction de perte
-            if "Loss" in df_resume.columns and df_resume["Loss"].notna().any():
-                fig, ax = plt.subplots()
-                df_resume["Loss"].dropna().plot(kind="bar", color="salmon", ax=ax)
-                plt.ylabel("Loss")
-                plt.title("Comparaison de la fonction de perte (Loss)")
-                plt.xticks(rotation=45)
+                plt.ylabel("Score / Erreur")
+                plt.title("Comparaison des métriques train/test")
+                plt.xticks(rotation=45, ha="right")
                 plt.tight_layout()
                 st.pyplot(fig)
 
@@ -209,22 +238,16 @@ with ml_tabs[2]:
                     coeffs_list.append(coef_series)
 
             if coeffs_list:
-               df_coeffs = pd.concat(coeffs_list, axis=1).fillna(0)
+                df_coeffs = pd.concat(coeffs_list, axis=1).fillna(0)
 
-               st.subheader("📋 Coefficients normalisés des variables (Ridge)")
-               st.dataframe(df_coeffs.style.format("{:.3e}"))
+                st.subheader("📋 Coefficients normalisés des variables (Ridge)")
+                st.dataframe(df_coeffs.style.format("{:.3e}"))
 
-               st.subheader("📊 Comparaison visuelle des coefficients normalisés")
-               fig, ax = plt.subplots(figsize=(12, 6))
-               df_coeffs.plot(kind="bar", ax=ax)
-               plt.title("Comparaison des coefficients Ridge par variable (normalisés)")
-               plt.ylabel("Coefficient normalisé")
-               plt.xticks(rotation=45, ha="right")
-               plt.tight_layout()
-               st.pyplot(fig)
-
-
-        else:
-            st.warning("Sélectionnez au moins un modèle pour comparer.")
-    else:
-        st.info("Entraînez d'abord au moins un modèle pour comparer.")
+                st.subheader("📊 Comparaison visuelle des coefficients normalisés")
+                fig, ax = plt.subplots(figsize=(12,6))
+                df_coeffs.plot(kind="bar", ax=ax)
+                plt.title("Comparaison des coefficients Ridge par variable (normalisés)")
+                plt.ylabel("Coefficient normalisé")
+                plt.xticks(rotation=45, ha="right")
+                plt.tight_layout()
+                st.pyplot(fig)

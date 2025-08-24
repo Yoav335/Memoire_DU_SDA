@@ -91,14 +91,30 @@ with ml_tabs[1]:
             y = res["fittedvalues"] + res["resid"]
             y_pred = res["fittedvalues"]
 
+            # Graph valeurs réelles vs prédictions
             plot_real_vs_pred(y, y_pred, f"{model_selected} : Valeurs réelles vs Prédictions")
 
+            # Cas Ridge (coefficients dispo)
             if "coefficients" in res:
-                plot_feature_importance(res["coefficients"], f"{model_selected} : Coefficients")
+                coeffs = pd.Series(res["coefficients"]).sort_values(ascending=False)
+                plot_feature_importance(coeffs, f"{model_selected} : Coefficients")
+
+                # ✅ Tableau des coefficients
+                st.markdown("### 📋 Coefficients des variables")
+                st.dataframe(coeffs.to_frame("Coefficient"))
+
+            # Cas Random Forest (feature importances dispo)
             elif "feature_importances" in res:
-                plot_feature_importance(res["feature_importances"], f"{model_selected} : Importance des variables")
+                importances = pd.Series(res["feature_importances"]).sort_values(ascending=False)
+                plot_feature_importance(importances, f"{model_selected} : Importance des variables")
+
+                # ✅ Tableau des importances
+                st.markdown("### 📋 Importance des variables")
+                st.dataframe(importances.to_frame("Importance"))
+
         else:
             st.warning("Pas de données de prédiction pour ce modèle.")
+
 
         # Arbre Random Forest
         if "model" in res and model_selected.startswith("Random Forest"):
@@ -134,12 +150,16 @@ with ml_tabs[2]:
     st.subheader("Comparaison des modèles")
     if st.session_state.ml_results:
         modèles_dispo = list(st.session_state.ml_results.keys())
-        modèles_choisis = st.multiselect("Sélectionnez les modèles à comparer", modèles_dispo, default=modèles_dispo)
+        modèles_choisis = st.multiselect(
+            "Sélectionnez les modèles à comparer", 
+            modèles_dispo, 
+            default=modèles_dispo
+        )
 
         if modèles_choisis:
             import numpy as np
 
-            # Construire le tableau résumé
+            # ---------------- Résumé général (R², RMSE, Loss) ----------------
             résumé = []
             for m in modèles_choisis:
                 res = st.session_state.ml_results[m]
@@ -152,14 +172,14 @@ with ml_tabs[2]:
 
             df_resume = pd.DataFrame(résumé).set_index("Modèle")
 
-            # Affichage du tableau avec format conditionnel
+            # Tableau résumé
             st.dataframe(df_resume.style.format({
                 "R²": "{:.3f}",
                 "RMSE": "{:.3f}",
                 "Loss": lambda x: "{:.3f}".format(x) if not pd.isna(x) else "-"
             }))
 
-            # --- Graphique comparatif des métriques (R², RMSE, Loss) ---
+            # Graph des métriques
             numeric_cols = df_resume.select_dtypes(include="number").columns
             if not numeric_cols.empty:
                 fig, ax = plt.subplots()
@@ -170,7 +190,7 @@ with ml_tabs[2]:
                 plt.tight_layout()
                 st.pyplot(fig)
 
-            # --- Graphique dédié à la fonction de perte ---
+            # Graph dédié à la fonction de perte
             if "Loss" in df_resume.columns and df_resume["Loss"].notna().any():
                 fig, ax = plt.subplots()
                 df_resume["Loss"].dropna().plot(kind="bar", color="salmon", ax=ax)
@@ -179,6 +199,31 @@ with ml_tabs[2]:
                 plt.xticks(rotation=45)
                 plt.tight_layout()
                 st.pyplot(fig)
+
+            # ---------------- Coefficients des modèles (Ridge uniquement) ----------------
+            coeffs_list = []
+            for m in modèles_choisis:
+                res = st.session_state.ml_results[m]
+                if "coefficients" in res:  # dispo seulement pour Ridge
+                    coef_series = pd.Series(res["coefficients"], name=m)
+                    coeffs_list.append(coef_series)
+
+            if coeffs_list:
+               df_coeffs = pd.concat(coeffs_list, axis=1).fillna(0)
+
+               st.subheader("📋 Coefficients normalisés des variables (Ridge)")
+               st.dataframe(df_coeffs.style.format("{:.3e}"))
+
+               st.subheader("📊 Comparaison visuelle des coefficients normalisés")
+               fig, ax = plt.subplots(figsize=(12, 6))
+               df_coeffs.plot(kind="bar", ax=ax)
+               plt.title("Comparaison des coefficients Ridge par variable (normalisés)")
+               plt.ylabel("Coefficient normalisé")
+               plt.xticks(rotation=45, ha="right")
+               plt.tight_layout()
+               st.pyplot(fig)
+
+
         else:
             st.warning("Sélectionnez au moins un modèle pour comparer.")
     else:

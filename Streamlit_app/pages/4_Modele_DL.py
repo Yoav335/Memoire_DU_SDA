@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from utils.data_loader import load_data
+from utils.ml_causal import default_features
 from utils.xgboost_model import (
     train_xgboost, plot_real_vs_pred, plot_feature_importance, plot_residuals,
     plot_pred_vs_true_hist, plot_partial_dependence, plot_shap_summary,
@@ -9,9 +10,6 @@ from utils.xgboost_model import (
     plot_learning_curve_interactive, plot_sorted_predictions, plot_shap_waterfall,
 )
 
-# =====================
-# TITRE PRINCIPAL
-# =====================
 st.title("🚀 Modélisation avec XGBoost")
 st.markdown("""
 Cette interface permet d'entraîner, d'évaluer et d'expliquer un modèle **XGBoost** 
@@ -23,10 +21,17 @@ sur les variables économiques et environnementales sélectionnées.
 # =====================
 df = load_data()
 target_vars = ['gdp', 'gdp_per_capita', 'co2', 'co2_per_capita']
-feature_vars = [c for c in df.columns if c not in target_vars + ['country', 'year']]
+
+# Par défaut, utiliser les mêmes features que les autres modèles
+default_feats = [f for f in default_features if f in df.columns]
 
 target = st.selectbox("🎯 Variable cible (target)", target_vars, key="select_target")
-features = st.multiselect("🧩 Variables explicatives", feature_vars, default=feature_vars[:3], key="select_features")
+features = st.multiselect(
+    "🧩 Variables explicatives",
+    options=default_feats,
+    default=default_feats,
+    key="select_features"
+)
 
 pays_disponibles = sorted(df['country'].dropna().unique())
 zones = ["Monde"] + pays_disponibles
@@ -65,6 +70,7 @@ with tabs[0]:
             st.metric("RMSE", f"{results['rmse']:.3f}")
             st.metric("MAE", f"{results['mae']:.3f}")
             st.metric("MAPE (%)", f"{results['mape']:.2f}")
+
 
 # =====================
 # ONGLET 2 : VISUALISATIONS

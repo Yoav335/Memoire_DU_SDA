@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 from utils.data_loader import load_data
-from utils.ml_models import train_ridge, train_random_forest, train_ridge_split
-from sklearn.tree import plot_tree
+from utils.ml_models import train_ridge, train_ridge_split
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -41,7 +40,7 @@ feature_vars = [c for c in df.columns if c not in target_vars + ['country', 'yea
     #"co2_including_luc_growth_prct",
     # "energy_per_gdp"
 
-    # Pour la belegique, on test d'autres variables
+    # Pour la France, on test d'autres variables
 default_features = [
     "cement_co2",
     "oil_co2",
@@ -80,7 +79,7 @@ zone = st.selectbox("Choisissez la zone géographique (Personnalisé)", zones, k
 # Choix du modèle ML
 model_choice = st.radio(
     "Choisissez le modèle de Machine Learning",
-    ["Ridge Regression (train only)", "Ridge Regression (train/test)", "Random Forest"]
+    ["Ridge Regression (train only)", "Ridge Regression (train/test)"]
 )
 
 # Tabs pour organisation
@@ -104,8 +103,7 @@ with ml_tabs[0]:
                 results = train_ridge(df_zone, target, features)
             elif model_choice == "Ridge Regression (train/test)":
                 results = train_ridge_split(df_zone, target, features)
-            elif model_choice == "Random Forest":
-                results = train_random_forest(df_zone, target, features)
+        
 
             model_key = f"{model_choice} - {target} - {zone}"
             st.session_state.ml_results[model_key] = results
@@ -136,46 +134,8 @@ with ml_tabs[1]:
                 st.markdown("### 📋 Coefficients des variables")
                 st.dataframe(coeffs.to_frame("Coefficient"))
 
-            # Cas Random Forest (feature importances dispo)
-            elif "feature_importances" in res:
-                importances = pd.Series(res["feature_importances"]).sort_values(ascending=False)
-                plot_feature_importance(importances, f"{model_selected} : Importance des variables")
-
-                # ✅ Tableau des importances
-                st.markdown("### 📋 Importance des variables")
-                st.dataframe(importances.to_frame("Importance"))
-
         else:
             st.warning("Pas de données de prédiction pour ce modèle. Assurez-vous d'utiliser un modèle train/test.")
-
-        # Arbre Random Forest
-        if "model" in res and model_selected.startswith("Random Forest"):
-            rf_model = res["model"]
-            st.markdown("### Visualisation d'un arbre de la forêt")
-
-            n_trees = len(rf_model.estimators_)
-            tree_index = st.slider("Choisissez l'arbre à afficher", 0, n_trees - 1, 0)
-
-            fig, ax = plt.subplots(figsize=(20, 12))
-            plot_tree(
-                rf_model.estimators_[tree_index],
-                feature_names=res.get("features", None),
-                filled=True,
-                rounded=True,
-                fontsize=10,
-                ax=ax
-            )
-            st.pyplot(fig)
-
-            depths = [estimator.tree_.max_depth for estimator in rf_model.estimators_]
-            fig, ax = plt.subplots()
-            sns.histplot(depths, bins=range(max(depths) + 2), ax=ax)
-            ax.set_title("Distribution des profondeurs des arbres dans la forêt")
-            ax.set_xlabel("Profondeur de l'arbre")
-            ax.set_ylabel("Nombre d'arbres")
-            st.pyplot(fig)
-    else:
-        st.info("Entraînez d'abord un modèle pour voir les graphiques.")
 
 # --- Onglet Comparaison ---
 with ml_tabs[2]:

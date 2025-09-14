@@ -44,7 +44,7 @@ default_models = {
         "description": "Modèle avec PIB total expliqué par CO2 total et consommation d'énergie par habitant."
     },
     "Régression 2": {
-        "target": "gdp_per_capita",
+        "target": "gdp",
         "features": ["total_ghg", "oil_co2", "gas_co2"],
         "description": "Modèle avec PIB par habitant expliqué par émissions totales de GES, CO2 pétrole et CO2 gaz."
     }

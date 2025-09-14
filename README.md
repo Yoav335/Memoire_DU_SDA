@@ -5,15 +5,14 @@ Il combine plusieurs approches statistiques et de machine learning, incluant :
 
 - Régressions économétriques classiques (OLS)  
 - Modèles de machine learning (ex. XGBoost)  
-- Modèles de deep learning (à venir)  
 
-L’objectif est de comparer les performances des différents modèles, visualiser les résultats, et faciliter l’interprétation des relations entre variables économiques et environnementales.
+L’objectif est de comparer les performances des différents modèles, visualiser les résultats, et faciliter l’interprétation des relations entre variables économiques et environnementales afin de nourrir un mémoire de M1 (Data Analytics Paris 1 Panthéon Sorbonne)
 
 ---
 
 ## Installation
 
-```bash
+
 git clone https://github.com/Yoav335/Memoire_DU_SDA.git
 
 cd Memoire_DU_SDA
@@ -25,10 +24,10 @@ source MemoireM1/bin/activate
 
 
 pip install -r requirements.txt
-streamlit run app.py
+streamlit run Memoire_DU_SDA/Streamlit_app/Présentation.py
 
 
-### Requirements.txt
+Requirements.txt
 
 streamlit
 pandas
